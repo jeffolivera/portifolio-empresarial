@@ -1,0 +1,819 @@
+# Planejamento: Portfolio 3D Interativo — JP Studio
+
+> **Objetivo**: Criar um site portfolio 3D imersivo como *case* do próprio JP Studio, demonstrando capacidade técnica e estética. O foco é um **Hero 3D interativo** + navegação fluida, performático em mobile e desktop.
+
+---
+
+## 1. Conceito & Direção Criativa
+
+### Tema: "Beleza em Movimento"
+- **Metáfora visual**: Partículas/delgadas fibras que reagem ao cursor/scroll — remetem a cílios, fios de cabelo, cerdas de pincel, brilho de esmalte
+- **Paleta**: Derivada do design system existente (vinho, dourado, carvão, nude) — tokens já definidos em `src/styles.css` / `tailwind.config`
+- **Tom**: Elegante, tátil, premium — não "tech demo", mas experiência de marca
+
+### Referências Visuais
+| Referência | O que aproveitar |
+|------------|------------------|
+| **Rive.app / LottieFiles showcase** | Animações vetoriais leves, interativas |
+| **Three.js Journey / Bruno Simon** | Scroll-driven 3D, performance mobile |
+| **Apple product pages** | Reveal on scroll, parallax sutil, foco no produto |
+| **Cílios macro photography** | Textura, transparência, reflexo — base para shaders |
+
+---
+
+## 2. Arquitetura Técnica
+
+### Stack 3D
+| Camada | Escolha | Justificativa |
+|--------|---------|---------------|
+| **Core** | **Three.js (r160+)** via `@react-three/fiber` (R3F) | Ecossistema React nativo, suspense, SSR-friendly |
+| **Abstrações** | `@react-three/drei` | `Html`, `Text`, `ScrollControls`, `Effects`, `Environment` prontos |
+| **Física/Partículas** | `three-gpu-pathtracer` ou custom compute shader | 10k+ partículas @ 60fps mobile via GPU |
+| **Scroll** | `gsap` + `ScrollTrigger` (ou `@react-three/drei/ScrollControls`) | Scroll-driven timeline, scrub suave |
+| **Carregamento** | `useGLTF` + `drei/Preload` + `React.Suspense` | Progressive loading, LCP protegido |
+| **Build** | Vite (já configurado) + `vite-plugin-glsl` para shaders | HMR shaders, tree-shaking Three.js |
+
+### Estrutura de Pastas (nova)
+```
+src/
+├── portfolio/                    # Novo módulo isolado
+│   ├── components/
+│   │   ├── hero/
+│   │   │   ├── Hero3D.tsx           # Canvas principal
+│   │   │   ├── ParticleSystem.tsx   # Sistema de partículas (compute shader)
+│   │   │   ├── HeroContent.tsx      # Camada HTML sobreposta (textos, CTAs)
+│   │   │   └── shaders/
+│   │   │       ├── particle.vert.glsl
+│   │   │       ├── particle.frag.glsl
+│   │   │       └── postprocess.frag.glsl
+│   │   ├── scene/
+│   │   │   ├── SceneManager.tsx     # Orquestra câmera, iluminação, resize
+│   │   │   ├── CameraRig.tsx        # Câmera + controles (orbital/scroll)
+│   │   │   └── LightingRig.tsx      # HDRI + luzes chave/preenchimento
+│   │   ├── cases/                   # 🆕 Sistema de Cases
+│   │   │   ├── grid/
+│   │   │   │   ├── CasesGrid.tsx          # Grid responsivo + filtros + busca
+│   │   │   │   ├── CaseCard.tsx           # Card individual (com mini 3D preview)
+│   │   │   │   ├── CaseCardSkeleton.tsx   # Skeleton loader
+│   │   │   │   ├── FilterChips.tsx        # Chips de categoria/tech
+│   │   │   │   └── SearchInput.tsx        # Busca debounced
+│   │   │   ├── detail/
+│   │   │   │   ├── CaseDetailPage.tsx     # Página completa do case
+│   │   │   │   ├── CaseHero.tsx           # Hero do detail (cover + meta + CTA)
+│   │   │   │   ├── CaseCarousel.tsx       # Carrossel mídia + 3D viewer
+│   │   │   │   ├── CaseBody.tsx           # Seções: challenge/solution/results
+│   │   │   │   ├── CaseNavigation.tsx     # Prev/Next + back to grid
+│   │   │   │   ├── RelatedCases.tsx       # 3 cards relacionados
+│   │   │   │   ├── MetricCard.tsx         # KPI visual
+│   │   │   │   ├── TechBadge.tsx          # Badge tech stack clicável
+│   │   │   │   └── Lightbox.tsx           # Fullscreen gallery
+│   │   │   ├── shared/
+│   │   │   │   ├── CaseMiniCard.tsx       # Card minúsculo (nav lateral)
+│   │   │   │   ├── CaseTag.tsx            # Tag categoria/tech reutilizável
+│   │   │   │   └── Prose.tsx              # Markdown/HTML renderizado (Tailwind Typography)
+│   │   │   └── index.ts
+│   │   ├── ui/
+│   │   │   ├── ScrollProgress.tsx   # Barra progresso 3D
+│   │   │   ├── NavIndicator.tsx     # Indicador seção ativa
+│   │   │   └── ReducedMotion.tsx    # Fallback a11y
+│   │   └── index.ts
+│   ├── hooks/
+│   │   ├── useParticleSystem.ts     # Lógica GPU particles
+│   │   ├── useScrollSync.ts         # Scroll ↔ Three.js sync
+│   │   ├── usePerformance.ts        # FPS monitor, auto-quality
+│   │   ├── useReducedMotion.ts      # prefers-reduced-motion
+│   │   ├── useCases.ts              # 🆕 Fetch/filtro/busca cases
+│   │   ├── useCaseNavigation.ts     # 🆕 Prev/next + keyboard/touch
+│   │   └── useViewTransition.ts     # 🆕 Shared element transitions
+│   ├── lib/
+│   │   ├── three-utils.ts           # Helpers: loadHDRI, dispose, etc.
+│   │   ├── shaders.ts               # ShaderMaterial factories
+│   │   ├── assets.ts                # Modelos, texturas, HDRI (manifest)
+│   │   ├── case-schema.ts           # 🆕 Zod schema + types
+│   │   └── cases.ts                 # 🆕 getCases, getCase, getFeaturedCases
+│   ├── data/
+│   │   └── cases.json               # 🆕 Dados estáticos (inicial)
+│   ├── routes/
+│   │   ├── portfolio.tsx            # Rota TanStack: /portfolio (grid)
+│   │   └── portfolio.$slug.tsx      # 🆕 Rota dinâmica: /portfolio/[slug]
+│   └── index.ts                     # Exports públicos
+```
+
+---
+
+## 3. Hero 3D — Especificação Detalhada
+
+### 3.1 Cena Base
+```
+┌─────────────────────────────────────────────────────────────┐
+│  <Canvas>                                                   │
+│   ├── <ColorAttachments> (sRGB + depth para post-process)  │
+│   ├── <SceneManager>                                        │
+│   │   ├── <LightingRig>          → HDRI studio + 2 area    │
+│   │   ├── <CameraRig>            → FOV 45, posição [0,0,5] │
+│   │   └── <ParticleSystem>       → 15k pontos, GPU compute │
+│   ├── <HeroContent> (HTML overlay, z-index: 10)            │
+│   │   ├── Headline "Beleza que se move"                     │
+│   │   ├── Subheadline + CTA "Ver casos"                     │
+│   │   └── Scroll indicator (mouse roda)                     │
+│   └── <Effects>                                             │
+│       ├── <Bloom> (threshold 0.85, intensity 0.3)          │
+│       ├── <Vignette> (sutil)                                │
+│       └── <ChromaticAberration> (0.002)                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Sistema de Partículas (GPU Compute Shader)
+```glsl
+// particle.frag.glsl — fragment shader do compute pass
+// Cada partícula: position (vec3), velocity (vec3), life (float), size (float)
+// Uniforms: uTime, uMouse, uScroll, uAttractors[4], uNoiseTexture
+
+void main() {
+  vec3 pos = texture(positionTex, uv).rgb;
+  vec3 vel = texture(velocityTex, uv).rgb;
+  float life = texture(lifeTex, uv).r;
+
+  // Atração por "pontos de beleza" (cílios, lábios, unhas)
+  for (int i = 0; i < 4; i++) {
+    vec3 attr = uAttractors[i];
+    float dist = distance(pos, attr);
+    float force = 1.0 / (dist * dist + 0.1);
+    vel += normalize(attr - pos) * force * 0.02;
+  }
+
+  // Ruído curl para organicidade
+  vec3 noise = curlNoise(pos * 0.5 + uTime * 0.1);
+  vel += noise * 0.01;
+
+  // Damping + integração
+  vel *= 0.98;
+  pos += vel * deltaTime;
+
+  // Respawn se life <= 0
+  if (life <= 0.0) { pos = randomSpherePoint(3.0); life = 1.0; }
+  life -= deltaTime * 0.15;
+
+  // Output para ping-pong textures
+  gl_FragColor = vec4(pos, life); // positionTex
+  // velocityTex, lifeTex escritos em passes separados
+}
+```
+
+**Parâmetros ajustáveis (expostos no `useParticleSystem`):**
+| Parâmetro | Default | Range | Afeta |
+|-----------|---------|-------|-------|
+| `count` | 15000 | 5k–50k | GPU load |
+| `attractorStrength` | 0.02 | 0–0.1 | Intensidade atração |
+| `noiseScale` | 0.5 | 0.1–2 | Turbulência |
+| `lifeSpan` | 6.5s | 2–15s | Densidade visual |
+| `baseSize` | 0.015 | 0.005–0.05 | Tela cheia vs sutil |
+
+### 3.3 Interações
+| Gatilho | Resposta | Implementação |
+|---------|----------|---------------|
+| **Mouse move** | Atractor segue cursor (suavizado 0.15s) | `useFrame` + `lerp` no `uAttractors[0]` |
+| **Scroll** | Câmera desce + partículas "caem" + reveal conteúdo | `ScrollControls` ou GSAP timeline scrub |
+| **Click/Tap** | Pulso radial (shockwave) no ponto | Compute shader: `vel += normalize(pos - clickPoint) * 0.5` |
+| **Hover CTA** | Partículas convergem para botão | `uAttractors[1] = buttonWorldPosition` |
+| **Resize** | Recalcula aspect, repositiona attractors | `useSize` hook + `camera.aspect = w/h` |
+
+### 3.4 Scroll-Driven Narrative (Seções)
+```typescript
+// Timeline GSAP sincronizada com ScrollTrigger
+const heroTimeline = gsap.timeline({
+  scrollTrigger: {
+    trigger: "#portfolio-canvas",
+    start: "top top",
+    end: "bottom top",
+    scrub: 1,
+    onUpdate: (self) => setScrollProgress(self.progress),
+  },
+});
+
+heroTimeline
+  .to(camera.position, { y: 0, z: 3 }, 0)           // Desce
+  .to(particleUniforms.uAttractors[2], { y: -1.5 }, 0) // Atrai para baixo
+  .to(htmlContent.current, { opacity: 0, y: -50 }, 0.2) // Fade out hero text
+  .from(sectionCases.current, { opacity: 0, y: 50 }, 0.4) // Fade in cases
+  .to(camera.position, { z: 8 }, 0.6);                // Pull back revela grid
+```
+
+---
+
+## 3.5 Cases System — Estrutura Escalável & Apresentação Rica
+
+### 3.5.1 Schema de Dados (TypeScript + Zod)
+```typescript
+// src/portfolio/lib/case-schema.ts
+import { z } from 'zod';
+
+export const CaseCategorySchema = z.enum([
+  'branding',
+  'web',
+  'mobile',
+  'motion',
+  '3d',
+  'print',
+  'photography',
+  'other',
+]);
+
+export const CaseTechSchema = z.object({
+  name: z.string(),
+  icon: z.string().optional(), // lucide icon name ou custom SVG
+  color: z.string().optional(), // hex para badge
+});
+
+export const CaseAssetSchema = z.object({
+  type: z.enum(['image', 'video', 'model3d', 'iframe', 'lottie']),
+  src: z.string(),
+  poster: z.string().optional(),
+  alt: z.string(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  // Para modelos 3D
+  format: z.enum(['glb', 'gltf', 'usdz']).optional(),
+  environment: z.string().optional(), // HDRI específico
+  cameraPosition: z.tuple([z.number(), z.number(), z.number()]).optional(),
+  cameraTarget: z.tuple([z.number(), z.number(), z.number()]).optional(),
+});
+
+export const CaseMetricSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+  description: z.string().optional(),
+});
+
+export const CaseSchema = z.object({
+  // Identidade
+  id: z.string().uuid(),                    // UUID v4
+  slug: z.string().regex(/^[a-z0-9-]+$/),   // URL-friendly
+  title: z.string().min(3).max(80),
+  shortDescription: z.string().max(160),    // Card/SEO
+  category: CaseCategorySchema,
+  tags: z.array(z.string()).default([]),
+  featured: z.boolean().default(false),     // Destaque no hero/grid
+  order: z.number().int().default(0),       // Ordenação manual
+
+  // Conteúdo rico
+  cover: CaseAssetSchema,                   // Imagem/video principal do card
+  gallery: z.array(CaseAssetSchema).min(1).max(20), // Carrossel no detail
+  description: z.string(),                  // Markdown/HTML longo
+  challenge: z.string().optional(),         // Desafio do projeto
+  solution: z.string().optional(),          // Solução aplicada
+  results: z.array(CaseMetricSchema).default([]), // KPIs/métricas
+
+  // Técnico
+  techStack: z.array(CaseTechSchema).default([]),
+  role: z.string().optional(),              // Meu papel no projeto
+  duration: z.string().optional(),          // Ex: "6 semanas"
+  teamSize: z.number().int().optional(),
+
+  // Links
+  liveUrl: z.string().url().optional(),
+  repoUrl: z.string().url().optional(),
+  caseStudyUrl: z.string().url().optional(), // Artigo detalhado externo
+
+  // Metadados
+  clientName: z.string().optional(),
+  clientLogo: z.string().optional(),        // URL logo cliente
+  publishedAt: z.string().datetime(),       // ISO 8601
+  updatedAt: z.string().datetime().optional(),
+  status: z.enum(['published', 'draft', 'archived']).default('published'),
+
+  // 3D Specific (opcional, para cases imersivos)
+  scene3d: z.object({
+    enabled: z.boolean().default(false),
+    modelUrl: z.string().optional(),        // .glb da cena completa
+    entryAnimation: z.enum(['flyIn', 'dissolve', 'scaleUp', 'none']).default('flyIn'),
+    hotspots: z.array(z.object({
+      position: z.tuple([z.number(), z.number(), z.number()]),
+      title: z.string(),
+      content: z.string(),                  // HTML/markdown
+      type: z.enum(['info', 'video', 'image', 'link']).default('info'),
+    })).default([]),
+  }).optional(),
+});
+
+export type Case = z.infer<typeof CaseSchema>;
+export type CaseAsset = z.infer<typeof CaseAssetSchema>;
+export type CaseMetric = z.infer<typeof CaseMetricSchema>;
+```
+
+### 3.5.2 Fonte de Dados (CMS-Ready)
+| Opção | Como funciona | Prós | Contras |
+|-------|---------------|------|---------|
+| **JSON estático** (`src/portfolio/data/cases.json`) | Array de `Case` no bundle | Zero deps, fast, versionado | Requer rebuild para adicionar |
+| **Supabase (tabela `portfolio_cases`)** | Mesmo backend do agendamento | CMS real, admin panel, RLS, realtime | Mais complexo, latência |
+| **Headless CMS (Contentful/Sanity/Strapi)** | API externa | Editor visual, webhooks, preview | Custo, dependência externa |
+| **Arquivos MDX** (`content/cases/*.mdx`) | Frontmatter + Markdown | Git-based, preview local, tipado | Build step, menos flexível para assets 3D |
+
+**Recomendação inicial**: **JSON estático + Supabase opcional** — comece com JSON (zero config, deploy automático), migre para Supabase quando a cliente quiser editar sozinha. O schema Zod valida ambos.
+
+```typescript
+// src/portfolio/lib/cases.ts
+import { CaseSchema, type Case } from './case-schema';
+import casesJson from './cases.json'; // ou fetch do Supabase
+
+export async function getCases(): Promise<Case[]> {
+  const parsed = CaseSchema.array().safeParse(casesJson);
+  if (!parsed.success) {
+    console.error('Invalid cases data:', parsed.error.flatten());
+    return [];
+  }
+  return parsed.data
+    .filter(c => c.status === 'published')
+    .sort((a, b) => b.order - a.order || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+}
+
+export async function getCase(slug: string): Promise<Case | null> {
+  const cases = await getCases();
+  return cases.find(c => c.slug === slug) ?? null;
+}
+
+export async function getFeaturedCases(limit = 3): Promise<Case[]> {
+  const cases = await getCases();
+  return cases.filter(c => c.featured).slice(0, limit);
+}
+```
+
+### 3.5.3 Grid de Cases (Escalável & Responsivo)
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  <CasesGrid>                                                       │
+│   ├── Layout: CSS Grid auto-fit minmax(320px, 1fr)                │
+│   │   Mobile: 1 col  │  Tablet: 2 col  │  Desktop: 3-4 col       │
+│   ├── Gap: 24px (clamp 16-32px)                                    │
+│   ├── Animação entrada: Stagger 80ms + IntersectionObserver       │
+│   │   (cada card: fade-up + scale(0.95→1), delay index * 80ms)   │
+│   ├── Filtros (opcional):                                          │
+│   │   [Todos] [Branding] [Web] [3D] [Motion] — chips animados     │
+│   │   Filtro client-side instantâneo (sem re-fetch)               │
+│   ├── Busca: Debounced 300ms, match title/tags/description        │
+│   ├── Load More / Infinite Scroll:                                 │
+│   │   Inicial: 9 cards → +6 por click/scroll bottom               │
+│   │   Skeleton loaders durante fetch                              │
+│   └── Empty State: Ilustração 3D sutil + "Nenhum case encontrado" │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Card de Case (Componente `<CaseCard />`)**
+```
+┌────────────────────────────────────────────────────────────┐
+│  <article class="case-card group relative overflow-hidden"> │
+│   ├── <CaseCover>                                          │
+│   │   ├── Imagem/Video cover (aspect-ratio: 4/3)           │
+│   │   ├── Badge categoria (canto sup. esq.)                │
+│   │   ├── Overlay hover:                                    │
+│   │   │   ├── Ícone "Ver case" (seta →)                    │
+│   │   │   ├── Tags tech stack (máx 3 + "+N")               │
+│   │   │   └── Gradient bg (vinho→dourado) opacity 0→90%    │
+│   │   └── <Canvas> mini 3D preview (opcional, featured)    │
+│   │       → Modelo low-poly rotando devagar (30fps cap)    │
+│   ├── <CaseContent>                                        │
+│   │   ├── <h3>{title}</h3>                                 │
+│   │   ├── <p class="short-desc">{shortDescription}</p>     │
+│   │   ├── <div class="metrics">                            │
+│   │   │   ├── <span>📈 +{metric.value}</span>              │
+│   │   │   └── ...                                          │
+│   │   └── <div class="tech-badges">                        │
+│   │       {techStack.slice(0,4).map(t => <Badge>{t.name}</Badge>)}
+│   └── <CaseActions>                                        │
+│       ├── <Link to="/portfolio/{slug}">Ver detalhes</Link> │
+│       └── {liveUrl && <a href={liveUrl} target="_blank">Ver online</a>}
+└────────────────────────────────────────────────────────────┘
+```
+
+### 3.5.4 Case Detail — Apresentação Imersiva
+
+**Roteamento**: `/portfolio/[slug]` (TanStack Router dynamic route)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  <CaseDetailPage>                                                            │
+│   ├── <CaseHero> (acima do fold)                                            │
+│   │   ├── Layout: Split 60/40 (desktop) / Stack (mobile)                   │
+│   │   ├── Lado visual:                                                      │
+│   │   │   ├── Carrossel full-width (embla-carousel)                         │
+│   │   │   │   ├── Imagens/Videos (lightbox zoom + swipe)                   │
+│   │   │   │   ├── Modelo 3D interativo (se case.scene3d.enabled)           │
+│   │   │   │   │   → `<Canvas>` com `OrbitControls` + auto-rotate idle      │
+│   │   │   │   │   → Hotspots clicáveis (pulsa sutil)                       │
+│   │   │   │   └── Thumbnails strip (mobile: dots)                          │
+│   │   │   └── Badges: Categoria + "Featured" + Status                      │
+│   │   └── Lado textual:                                                     │
+│   │       ├── Breadcrumb: Portfolio / {category} / {title}                 │
+│   │       ├── <h1>{title}</h1>                                              │
+│   │       ├── <p class="lead">{shortDescription}</p>                        │
+│   │       ├── <div class="meta-grid">                                      │
+│   │       │   ├── Cliente / Duração / Equipe / Meu papel                   │
+│   │       │   └── Tech stack badges (clicáveis → filter grid)              │
+│   │       ├── <div class="cta-row">                                        │
+│   │       │   ├── {liveUrl → Button "Ver online"}                          │
+│   │       │   ├── {repoUrl → GhostButton "Código"}                         │
+│   │       │   └── {caseStudyUrl → Link "Case study completo"}              │
+│   │       └── Share: Copy link / Twitter / LinkedIn (Web Share API)        │
+│   ├── <CaseBody> (scrollável)                                               │
+│   │   ├── <section id="challenge">                                         │
+│   │   │   ├── <h2>O Desafio</h2>                                           │
+│   │   │   └── <Prose>{challenge}</Prose>  (Markdown renderizado)           │
+│   │   ├── <section id="solution">                                          │
+│   │   │   ├── <h2>A Solução</h2>                                           │
+│   │   │   └── <Prose>{solution}</Prose>                                    │
+│   │   │       ├── Screenshots inline (width: 100% / 50% side-by-side)      │
+│   │   │       ├── Code snippets (Prism/Shiki highlighting)                 │
+│   │   │       └── Video embeds (YouTube/Vimeo/MP4)                         │
+│   │   ├── <section id="results">                                           │
+│   │   │   ├── <h2>Resultados</h2>                                          │
+│   │   │   └── <MetricsGrid>{results.map(m => <MetricCard {...m} />)}</MetricsGrid>
+│   │   │       MetricCard: Icon + Valor grande + Label + Descrição tooltip  │
+│   │   ├── <section id="process"> (opcional)                                │
+│   │   │   ├── Timeline visual: Research → Design → Dev → Launch            │
+│   │   │   └── Entregáveis por fase (ícones + descrição)                    │
+│   │   └── <section id="gallery">                                           │
+│   │       ├── <h2>Galeria Completa</h2>                                    │
+│   │       └── Masonry grid (todas as assets do case.gallery)               │
+│   │           Click → Lightbox fullscreen (swipe, zoom, download)          │
+│   ├── <CaseNavigation> (sticky bottom mobile / fixed side desktop)         │
+│   │   ├── Anterior: <CaseCardMini prevCase />                              │
+│   │   ├── Voltar ao Grid: Button "Todos os cases"                          │
+│   │   └── Próximo: <CaseCardMini nextCase />                               │
+│   └── <RelatedCases> (abaixo)                                              │
+│       ├── "Você também pode gostar"                                        │
+│       └── 3 cards (mesma categoria ou tags overlap)                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.5.5 Navegação Entre Cases (Fluid & 3D)
+| Transição | Implementação |
+|-----------|---------------|
+| **Grid → Detail** | Shared Element Transition (View Transitions API) — cover image "voa" para hero do detail |
+| **Detail → Detail (prev/next)** | Cross-fade + slide horizontal (GSAP FLIP) — mantém scroll position |
+| **Detail → Grid** | Reverse shared element + particles "explodem" para posição do card |
+| **Teclado** | `←` `→` navegam prev/next, `Esc` volta grid, `Tab` foco ordenado |
+| **Touch** | Swipe horizontal no detail → prev/next (threshold 80px) |
+| **URL** | History pushState — deep linkable, shareable, SEO-friendly |
+
+### 3.5.6 Admin / Gestão de Cases (Futuro)
+- **Supabase Admin Panel**: Tabela `portfolio_cases` com RLS (só admin/editor)
+- **Campos**: Todos do schema + `seo_title`, `seo_description`, `og_image`
+- **Upload assets**: Supabase Storage bucket `portfolio-assets` (CDN, transform on-the-fly)
+- **Preview mode**: `?preview=true` + `draft` status → visible só autenticado
+- **Webhook revalidate**: `onUpdate` → `revalidatePath('/portfolio')` (Next.js style) ou cache bust
+
+---
+
+## 4. Performance & Qualidade Adaptativa
+
+### 4.1 Orçamento de Frame (Target: 60fps / 16.6ms)
+| Item | Budget Mobile | Budget Desktop |
+|------|---------------|----------------|
+| Particle compute (2 passes) | 4ms | 2ms |
+| Render (scene + post) | 6ms | 3ms |
+| React overhead | 2ms | 1ms |
+| **Total** | **~12ms** | **~6ms** |
+| **Margem** | **4.6ms** | **10.6ms** |
+
+### 4.2 Auto-Quality (hook `usePerformance`)
+```typescript
+// Monitora FPS médio 2s → ajusta particleCount + post-process
+const qualityTiers = [
+  { name: 'ultra', count: 30000, bloom: true, chromatic: true, ssr: true },
+  { name: 'high',  count: 20000, bloom: true, chromatic: false, ssr: false },
+  { name: 'mid',   count: 12000, bloom: false, chromatic: false, ssr: false },
+  { name: 'low',   count: 6000,  bloom: false, chromatic: false, ssr: false },
+];
+
+// Se FPS < 50 por 3s consecutivos → desce tier
+// Se FPS > 58 por 10s → sobe tier (com hysteresis)
+```
+
+### 4.3 Fallbacks A11y
+- `prefers-reduced-motion`: **desliga** partículas animadas → mostra imagem estática (WebP hero) + fade-in simples
+- `prefers-contrast: more`: desliga bloom/chromatic, aumenta opacidade textos
+- `low-end-device` (detectado via `navigator.deviceMemory < 4` ou `hardwareConcurrency < 4`): inicia no tier `low`
+
+---
+
+## 5. Integração com Projeto Existente
+
+### 5.1 Roteamento (TanStack Router)
+```typescript
+// src/portfolio/routes/portfolio.tsx — Grid principal
+import { createFileRoute } from '@tanstack/react-router';
+import { PortfolioPage } from '../components/PortfolioPage';
+
+export const Route = createFileRoute('/portfolio')({
+  head: () => ({
+    meta: [
+      { title: 'Portfólio 3D — JP Studio' },
+      { name: 'description', content: 'Cases interativos em 3D time real.' },
+    ],
+  }),
+  component: PortfolioPage,
+});
+
+// src/portfolio/routes/portfolio.$slug.tsx — Detail page
+import { createFileRoute } from '@tanstack/react-router';
+import { CaseDetailPage } from '../components/cases/detail/CaseDetailPage';
+import { getCase } from '../lib/cases';
+
+export const Route = createFileRoute('/portfolio/$slug')({
+  validateSearch: (search) => ({ slug: search.slug as string }),
+  loader: async ({ params }) => {
+    const caseData = await getCase(params.slug);
+    if (!caseData) throw new Error('Case not found');
+    return { caseData };
+  },
+  head: ({ loaderData }) => ({
+    meta: [
+      { title: `${loaderData.caseData.title} — Portfólio JP Studio` },
+      { name: 'description', content: loaderData.caseData.shortDescription },
+      { property: 'og:title', content: loaderData.caseData.title },
+      { property: 'og:description', content: loaderData.caseData.shortDescription },
+      { property: 'og:image', content: loaderData.caseData.cover.src },
+      { property: 'og:type', content: 'article' },
+    ],
+  }),
+  notFoundComponent: () => <div className="p-8 text-center">Case não encontrado</div>,
+  component: CaseDetailPage,
+});
+```
+
+### 5.5 View Transitions API (Navegação Fluida)
+```typescript
+// src/portfolio/hooks/useViewTransition.ts
+export function useViewTransition() {
+  const [transitioning, setTransitioning] = useState(false);
+
+  const navigateWithTransition = useCallback(
+    async (href: string, element: HTMLElement) => {
+      if (!document.startViewTransition) {
+        window.location.href = href;
+        return;
+      }
+
+      setTransitioning(true);
+      const transition = document.startViewTransition(async () => {
+        window.location.href = href;
+      });
+
+      // Aguarda a transição completar
+      try {
+        await transition.finished;
+      } finally {
+        setTransitioning(false);
+      }
+    },
+    []
+  );
+
+  return { transitioning, navigateWithTransition };
+}
+
+// No CaseCard: wrap cover image com `style={{ viewTransitionName: 'case-cover-${case.id}' }}`
+// No CaseDetail Hero: mesma `viewTransitionName` → browser anima automaticamente
+```
+
+### 5.2 Design System (Reuso)
+- **Tokens**: `vinho`, `dourado`, `carvao`, `nude` → `CSS custom properties` injetadas no Three.js via `uniforms`
+- **Tipografia**: `Montserrat` / `Playfair Display` / `Great Vibes` → `drei/Text` com `font: { family: 'Playfair Display' }`
+- **Componentes UI**: `Button`, `Card`, `Link` do `@/components/ui` para overlays HTML
+
+### 5.3 Assets Pipeline
+```
+public/portfolio/
+├── hdri/
+│   └── studio_soft_2k.hdr          # 2k suficiente (mobile carrega 1k)
+├── textures/
+│   ├── noise-curl.png              # 256² RGBA para curl noise
+│   └── particle-gradient.png       # 16² gradient cor por life
+├── models/
+│   └── (opcional) glb produtos     # Se quiser mostrar produto 3D real
+└── images/
+    └── hero-fallback.webp          # Imagem estática para reduced-motion
+```
+
+### 5.4 Variáveis de Ambiente
+```env
+# .env.local (não commitar)
+VITE_PORTFOLIO_HDRI_URL=/portfolio/hdri/studio_soft_2k.hdr
+VITE_PORTFOLIO_ASSET_BASE=/portfolio/
+```
+
+### 5.6 Exemplo `cases.json` (Estrutura Completa)
+```json
+// src/portfolio/data/cases.json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "slug": "jp-studio-branding",
+    "title": "JP Studio — Identidade Visual & Digital",
+    "shortDescription": "Rebranding completo do estúdio de beleza: logo, paleta, site 3D, agendamento online.",
+    "category": "branding",
+    "tags": ["identidade visual", "web design", "3d", "typescript", "react"],
+    "featured": true,
+    "order": 10,
+    "cover": {
+      "type": "image",
+      "src": "/portfolio/cases/jp-studio/cover.webp",
+      "alt": "JP Studio branding cover - logo animado em 3D",
+      "width": 1600,
+      "height": 1200
+    },
+    "gallery": [
+      { "type": "image", "src": "/portfolio/cases/jp-studio/01-logo.webp", "alt": "Logo animado", "width": 1920, "height": 1080 },
+      { "type": "image", "src": "/portfolio/cases/jp-studio/02-palette.webp", "alt": "Paleta de cores", "width": 1920, "height": 1080 },
+      { "type": "video", "src": "/portfolio/cases/jp-studio/03-hero-demo.mp4", "poster": "/portfolio/cases/jp-studio/03-poster.webp", "alt": "Hero 3D interativo", "width": 1920, "height": 1080 },
+      { "type": "model3d", "src": "/portfolio/cases/jp-studio/hero-scene.glb", "format": "glb", "alt": "Cena 3D do hero", "environment": "/portfolio/hdri/studio_soft_2k.hdr" }
+    ],
+    "description": "Projeto end-to-end para o JP Studio, unindo marca física e digital. O desafio era traduzir a delicadeza do atendimento presencial para uma experiência web premium com agendamento inteligente.",
+    "challenge": "O estúdio tinha apenas Instagram e WhatsApp. Precisava de: (1) identidade visual coesa, (2) vitrine de produtos/serviços, (3) agendamento online que respeitasse regras de negócio complexas (férias, profissionais, durações variadas), (4) performance mobile impecável.",
+    "solution": "Criamos design system com tokens (cores, tipografia, espaçamento), site em TanStack Start + Supabase, motor de agendamento puro em TypeScript (zero dependência de backend para cálculo de slots), hero 3D com partículas GPU. Tudo deployado no Cloudflare Workers.",
+    "results": [
+      { "label": "Agendamentos online", "value": "+340%", "description": "Nos primeiros 3 meses vs WhatsApp only" },
+      { "label": "Tempo médio agendamento", "value": "45s", "description": "Da landing ao comprovante" },
+      { "label": "LCP mobile", "value": "1.8s", "description": "Com hero 3D ativo" },
+      { "label": "Taxa de conclusão", "value": "87%", "description": "Usuários que iniciam e finalizam" }
+    ],
+    "techStack": [
+      { "name": "React 19", "icon": "atom", "color": "#61DAFB" },
+      { "name": "TanStack Start", "icon": "route", "color": "#FF6B6B" },
+      { "name": "Three.js / R3F", "icon": "box", "color": "#000000" },
+      { "name": "Supabase", "icon": "database", "color": "#3ECF8E" },
+      { "name": "Tailwind CSS", "icon": "palette", "color": "#06B6D4" },
+      { "name": "TypeScript", "icon": "code", "color": "#3178C6" },
+      { "name": "Cloudflare Workers", "icon": "cloud", "color": "#F38020" }
+    ],
+    "role": "Tech Lead & Full-stack Developer",
+    "duration": "8 semanas",
+    "teamSize": 2,
+    "liveUrl": "https://jpstudio.com.br",
+    "repoUrl": "https://github.com/jpstudio/site",
+    "caseStudyUrl": "https://medium.com/@dev/jp-studio-case-study",
+    "clientName": "JP Studio",
+    "clientLogo": "/portfolio/clients/jp-studio-logo.svg",
+    "publishedAt": "2026-11-15T10:00:00Z",
+    "updatedAt": "2026-11-20T14:30:00Z",
+    "status": "published",
+    "scene3d": {
+      "enabled": true,
+      "modelUrl": "/portfolio/cases/jp-studio/hero-scene.glb",
+      "entryAnimation": "flyIn",
+      "hotspots": [
+        {
+          "position": [0, 1.2, -2],
+          "title": "Sistema de Partículas",
+          "content": "15k partículas GPU com compute shader. Reagem a mouse, scroll e cliques.",
+          "type": "info"
+        },
+        {
+          "position": [1.5, 0, -1],
+          "title": "Agendamento Inteligente",
+          "content": "Motor puro TypeScript: 0 dependências runtime, roda no cliente e servidor idêntico.",
+          "type": "info"
+        }
+      ]
+    }
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "slug": "ecommerce-beauty-3d",
+    "title": "BeautyBox — E-commerce com Prova 3D",
+    "shortDescription": "Loja de cosméticos com visualizador 3D de produtos (GLB/USDZ) e AR no mobile.",
+    "category": "web",
+    "tags": ["ecommerce", "3d", "ar", "webgl", "shopify headless"],
+    "featured": true,
+    "order": 9,
+    "cover": {
+      "type": "video",
+      "src": "/portfolio/cases/beautybox/cover.mp4",
+      "poster": "/portfolio/cases/beautybox/cover-poster.webp",
+      "alt": "Demo produto 3D rotacionando",
+      "width": 1920,
+      "height": 1080
+    },
+    "gallery": [
+      { "type": "image", "src": "/portfolio/cases/beautybox/01-pdp.webp", "alt": "Product page com 3D viewer", "width": 1920, "height": 1080 },
+      { "type": "image", "src": "/portfolio/cases/beautybox/02-ar.webp", "alt": "AR no iOS/Android", "width": 1920, "height": 1080 },
+      { "type": "model3d", "src": "/portfolio/cases/beautybox/lipstick.glb", "format": "glb", "alt": "Batom 3D", "environment": "/portfolio/hdri/studio_soft_2k.hdr" }
+    ],
+    "description": "Headless Shopify + Next.js + Three.js. Visualizador 3D nativo no PDP com fallback USDZ para AR Quick Look (iOS) e Scene Viewer (Android).",
+    "challenge": "Cliente queria 'experiência de loja física online'. Produtos de beleza dependem de cor, textura, brilho — fotos estáticas não convertem bem.",
+    "solution": "Pipeline de assets: fotogrametria → otimização Draco/ktx2 → CDN com transform on-the-fly. Viewer Three.js com controles touch naturais, iluminação HDRI, env map para reflexos reais. Botão 'Ver no seu espaço' abre AR nativo.",
+    "results": [
+      { "label": "Conversão PDP", "value": "+28%", "description": "vs PDP só fotos" },
+      { "label": "Tempo na página", "value": "+2m 15s", "description": "Média por sessão" },
+      { "label": "Devoluções por cor", "value": "-42%", "description": "Clientes veem cor real em 3D/AR" }
+    ],
+    "techStack": [
+      { "name": "Next.js 14", "icon": "globe", "color": "#000000" },
+      { "name": "Shopify Headless", "icon": "shopping-cart", "color": "#96BF48" },
+      { "name": "Three.js", "icon": "box", "color": "#000000" },
+      { "name": "GSAP", "icon": "move", "color": "#88CE02" },
+      { "name": "Vercel", "icon": "cloud", "color": "#000000" }
+    ],
+    "role": "3D Engineer & Frontend Lead",
+    "duration": "12 semanas",
+    "teamSize": 4,
+    "liveUrl": "https://beautybox.example.com",
+    "repoUrl": "https://github.com/beautybox/web",
+    "clientName": "BeautyBox Cosméticos",
+    "clientLogo": "/portfolio/clients/beautybox-logo.svg",
+    "publishedAt": "2026-09-01T09:00:00Z",
+    "status": "published"
+  }
+]
+```
+
+---
+
+## 6. Cronograma & Entregáveis
+
+| Sprint | Foco | Entregável | Critério de Aceite |
+|--------|------|------------|-------------------|
+| **1** (2-3d) | Setup + Particle System Core | `ParticleSystem.tsx` funcionando standalone (rota `/dev/particles`) | 15k particles @ 60fps mobile (Chrome DevTools Performance) |
+| **2** (2d) | Hero 3D + Scroll Sync | `/portfolio` com Hero completo, scroll → camera + reveal | Scroll suave, sem jank, LCP < 2.5s |
+| **3** (3d) | Cases System — Grid | Grid responsivo, filtros, busca, skeleton loaders, infinite scroll | 20+ cases sem jank, filtro < 50ms, a11y keyboard ok |
+| **4** (3d) | Cases System — Detail | Detail page imersiva: hero, carrossel 3D, seções, lightbox, nav prev/next | Shared element transition, hotspots 3D, métricas animadas |
+| **5** (2d) | Polish + A11y + Performance | Auto-quality, reduced-motion, fallback, SEO, meta tags, View Transitions | Lighthouse Perf ≥ 90, A11y ≥ 95, SEO ≥ 95, CLS < 0.1 |
+| **6** (1d) | Integração Final + Deploy | Link no header, build production, preview Cloudflare, smoke tests | `npm run build` ok, preview funcional, 0 erros console |
+
+**Total estimado**: 13–14 dias úteis
+
+---
+
+## 7. Riscos & Mitigações
+
+| Risco | Probabilidade | Impacto | Mitigação |
+|-------|---------------|---------|-----------|
+| Three.js bundle size > 150kb gzipped | Alta | LCP, mobile | `three-stdlib` tree-shaking, `import { Mesh } from 'three'` (não `three/src`), dynamic import da rota portfolio |
+| Compute shader não roda em Safari iOS (WebGL2) | Média | Quebra hero | Fallback: `GPUComputeRenderer` → CPU fallback (menor count) ou `canvas 2d` partículas simplificadas |
+| Memória GPU mobile (texture ping-pong 4×15k) | Média | Crash/tab reload | `rgba16float` ao invés `rgba32float`, `count` adaptativo via `usePerformance` |
+| Scroll jank em mobile (GSAP + Three.js) | Alta | UX ruim | `ScrollControls` (native Three.js) ao invés GSAP, `passive: true` listeners, `will-change: transform` |
+| Acessibilidade (screen readers) | Média | Legal/SEO | Camada HTML semântica paralela (`aria-hidden` no canvas), `prefers-reduced-motion` testado |
+| **Cases com assets pesados (video/3D) → LCP/CLS** | Alta | Performance, UX | Lazy-load tudo abaixo do fold; `preload` só cover do case atual; `loading="lazy"` + `fetchpriority="low"`; placeholders blur (LQIP) |
+| **View Transitions API não suportada (Firefox/Safari antigos)** | Média | Navegação menos fluida | Fallback GSAP FLIP animation — mesma sensação, sem API nativa |
+| **Navegação teclado/touch entre cases quebra foco** | Média | A11y | `useCaseNavigation` gerencia `focus()` explícito; `tabIndex` controlado; testar com NVDA/VoiceOver |
+| **JSON `cases.json` cresce > 500kb → bundle size** | Baixa | Build/LCP | Migrar para Supabase/Contentful quando > 50 cases; code-split por categoria |
+| **Hotspots 3D em mobile (touch) — precisão baixa** | Média | UX | Hit-area aumentada (radius 2x); feedback visual + haptics (`navigator.vibrate`); fallback tooltip HTML |
+
+---
+
+## 8. Métricas de Sucesso (Pós-Launch)
+
+| Métrica | Target | Ferramenta |
+|---------|--------|------------|
+| **LCP (Hero)** | < 2.5s | Web Vitals / Lighthouse |
+| **FPS médio (mobile)** | ≥ 55fps | `usePerformance` hook + analytics event |
+| **Tempo na página (portfolio)** | > 90s | GA4 / Plausible |
+| **Interação 3D (click/drag/scroll)** | > 60% sessões | Custom event `portfolio_3d_interaction` |
+| **Conversão "Ver cases" → Contato** | +15% vs baseline | Funnel GA4 |
+| **Cases visualizados por sessão** | ≥ 3 | `case_view` event + session count |
+| **Tempo médio no Case Detail** | > 120s | `case_detail_time` (scroll depth + dwell) |
+| **Navegação Prev/Next usage** | > 25% das views detail | `case_nav_click` event |
+| **Filtro/Busca usage** | > 30% sessões grid | `case_filter`, `case_search` events |
+| **Shared element transition completion** | > 95% (sem fallback) | `view_transition_complete` vs `view_transition_fallback` |
+| **Lightbox/3D viewer engagement** | > 40% cases com gallery | `case_gallery_open`, `case_3d_interact` |
+
+---
+
+## 9. Próximos Passos Imediatos
+
+1. **Instalar dependências 3D**
+   ```bash
+   npm i three @react-three/fiber @react-three/drei @react-three/postprocessing gsap
+   npm i -D @types/three vite-plugin-glsl
+   ```
+
+2. **Configurar `vite.config.ts`**
+   ```typescript
+   import glsl from 'vite-plugin-glsl';
+   export default defineConfig({
+     plugins: [glsl(), ...],
+     optimizeDeps: { include: ['three', '@react-three/fiber', '@react-three/drei'] },
+   });
+   ```
+
+3. **Criar estrutura de pastas** (conforme seção 2)
+
+4. **Prototipar ParticleSystem isolado** em `/dev/particles` (rota temporária)
+
+5. **Definir HDRI** — baixar de [Poly Haven](https://polyhaven.com/hdris) "Studio Small" 2k, colocar em `public/portfolio/hdri/`
+
+---
+
+## 10. Decisões Pendentes (Alinhar com Stakeholder)
+
+- [ ] **Cases reais vs placeholders**: Usar cases reais do JP Studio (fotos antes/depois) ou cases genéricos "Beleza 3D"?
+- [ ] **Áudio sutil**: Ambient sound ao entrar no portfolio? (Ex: som de tesoura, pincel — opcional, mute default)
+- [ ] **WebGL2 vs WebGPU**: WebGPU via `three/webgpu` para compute shaders nativos? (Só Chrome/Edge 113+ por enquanto)
+- [ ] **Analytics customizados**: Eventos `particle_attract`, `scroll_section`, `case_click` — schema GA4?
+- [ ] **Deploy preview**: Branch `portfolio` + Cloudflare Preview URL para revisão antes do merge?
+
+---
+
+> **Arquivo vivo** — Atualizar conforme decisões técnicas e feedbacks de prototipação.
+> Responsável: Dev Lead + Designer 3D (se houver) + PO.
